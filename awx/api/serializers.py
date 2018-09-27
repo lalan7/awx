@@ -3557,7 +3557,7 @@ class WorkflowJobTemplateSerializer(JobTemplateMixin, LabelsListMixin, UnifiedJo
     class Meta:
         model = WorkflowJobTemplate
         fields = ('*', 'extra_vars', 'organization', 'survey_enabled', 'allow_simultaneous',
-                  'ask_variables_on_launch',)
+                  'ask_variables_on_launch', 'inventory', 'ask_inventory_on_launch',)
 
     def get_related(self, obj):
         res = super(WorkflowJobTemplateSerializer, self).get_related(obj)
@@ -3590,7 +3590,8 @@ class WorkflowJobSerializer(LabelsListMixin, UnifiedJobSerializer):
     class Meta:
         model = WorkflowJob
         fields = ('*', 'workflow_job_template', 'extra_vars', 'allow_simultaneous',
-                  '-execution_node', '-event_processing_finished', '-controller_node',)
+                  '-execution_node', '-event_processing_finished', '-controller_node',
+                  'inventory',)
 
     def get_related(self, obj):
         res = super(WorkflowJobSerializer, self).get_related(obj)
