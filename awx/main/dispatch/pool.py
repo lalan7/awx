@@ -15,6 +15,9 @@ from django.core.cache import cache as django_cache
 from jinja2 import Template
 import psutil
 
+from awx.main.models import UnifiedJob
+from awx.main.dispatch import reaper
+
 logger = logging.getLogger('awx.main.dispatch')
 
 
@@ -145,11 +148,12 @@ class PoolWorker(object):
                     orphaned.append(self.queue.get(block=False))
                 except QueueEmpty:
                     break  # qsize is not always _totally_ up to date
-            logger.error(
-                'requeuing {} messages from gone worker pid:{}'.format(
-                    len(orphaned), self.pid
+            if len(orphaned):
+                logger.error(
+                    'requeuing {} messages from gone worker pid:{}'.format(
+                        len(orphaned), self.pid
+                    )
                 )
-            )
         return orphaned
 
     @property
@@ -323,6 +327,12 @@ class AutoscalePool(WorkerPool):
                 # 2. take any pending tasks delivered to its queue and
                 #    send them to another worker
                 logger.error('worker pid:{} is gone (exit={})'.format(w.pid, w.exitcode))
+                if w.current_task:
+                    try:
+                        for j in UnifiedJob.objects.filter(celery_task_id=w.current_task['uuid']):
+                            reaper.reap_job(j, 'failed')
+                    except Exception:
+                        logger.exception('failed to reap job UUID {}'.format(w.current_task['uuid']))
                 orphaned.extend(w.orphaned_tasks)
                 self.workers.remove(w)
             elif w.idle and len(self.workers) > self.min_workers:

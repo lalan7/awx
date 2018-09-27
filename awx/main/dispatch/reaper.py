@@ -10,6 +10,22 @@ from awx.main.models import Instance, UnifiedJob, WorkflowJob
 logger = logging.getLogger('awx.main.dispatch')
 
 
+def reap_job(j, status):
+    j.status = status
+    j.start_args = ''  # blank field to remove encrypted passwords
+    j.job_explanation += ' '.join((
+        'Task was marked as running in Tower but was not present in',
+        'the job queue, so it has been marked as failed.',
+    ))
+    j.save(update_fields=['status', 'start_args', 'job_explanation'])
+    if hasattr(j, 'send_notification_templates'):
+        j.send_notification_templates('failed')
+    j.websocket_emit_status(status)
+    logger.error(
+        '{} is no longer running; reaping'.format(j.log_format)
+    )
+
+
 def reap(instance=None, status='failed'):
     '''
     Reap all jobs in waiting|running for this instance.
@@ -27,16 +43,4 @@ def reap(instance=None, status='failed'):
         ) & ~Q(polymorphic_ctype_id=workflow_ctype_id)
     )
     for j in jobs:
-        j.status = status
-        j.start_args = ''  # blank field to remove encrypted passwords
-        j.job_explanation += ' '.join((
-            'Task was marked as running in Tower but was not present in',
-            'the job queue, so it has been marked as failed.',
-        ))
-        j.save(update_fields=['status', 'start_args', 'job_explanation'])
-        if hasattr(j, 'send_notification_templates'):
-            j.send_notification_templates('failed')
-        j.websocket_emit_status(status)
-        logger.error(
-            '{} is no longer running; reaping'.format(j.log_format)
-        )
+        reap_job(j, status)
